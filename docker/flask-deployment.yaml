@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: to-do-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: to-do
+  template:
+    metadata:
+      labels:
+        app: to-do
+    spec:
+      containers:
+        - name: to-do
+          image: majiny/flask-app
+          ports:
+            - containerPort: 5000
+          env:
+            - name: MONGO_HOST
+              value: mongo-service
+            - name: MONGO_PORT
+              value: "27017"
+            - name: FLASK_ENV
+              value: development
+          imagePullPolicy: IfNotPresent
