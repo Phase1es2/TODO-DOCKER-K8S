@@ -281,3 +281,166 @@ minikube service to-do-service
 and we can see the URL address is http://127.0.0.1:64879 and we can visited the site by using this URL.
 ![Minikube App URL](./screenshot/64879_todo.png)
 
+## Deploy to AWS EKS
+### 1. download AWS CLI
+```
+curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+sudo installer -pkg AWSCLIV2.pkg -target /
+
+$ which aws
+/usr/local/bin/aws 
+$ aws --version
+aws-cli/2.31.9 Python/3.13.7 Darwin/25.1.0 source/arm64
+```
+
+### 2. Create cluster
+the easy we to create the cluster, we can use
+[eksctl][https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html]
+```
+eksctl create cluster \
+  --name flask-mongo-cluster \
+  --region us-east-1 \
+  --nodes 1 \
+  --node-type t3.micro
+```
+
+After launch, we can see
+![AWS_EKS](./screenshot/AWS_EKS.png)
+
+since there we limited cpu as 500m and memory: 256Mi.
+and when we trying to deploy the app, there in no engough resource, so it in the pending state
+![Pending State](./screenshot/limited_cpu_memory.png)
+
+
+using the kubectl to check why it is pending
+```
+kubectl describe pod <POD_ID>
+```
+![kubectl_describe](./screenshot/describe_pending.png)
+
+
+delete the resource we had before and rebuild
+```
+eksctl delete cluster --name flask-mongo-cluster --region us-east-1
+
+
+eksctl create cluster \
+  --name flask-mongo-cluster \
+  --region us-east-1 \
+  --nodegroup-name flask-nodegroup \
+  --nodes 2 \
+  --nodes-min 1 \
+  --nodes-max 3 \
+  --managed \
+  --node-type t3.small
+```
+### 3. set up addon
+Since we want to use pvc storage
+we need to Enable OIDC provbider (required for IAM-> K8s mapping)
+```
+eksctl utils associate-iam-oidc-provider \
+  --region us-east-1 \
+  --cluster flask-mongo-cluster \
+  --approve
+```
+then create IAM role for the EBS CSI driver
+```
+eksctl create iamserviceaccount \
+  --region us-east-1 \
+  --name ebs-csi-controller-sa \
+  --namespace kube-system \
+  --cluster flask-mongo-cluster \
+  --attach-policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy \
+  --approve \
+  --role-name AmazonEKS_EBS_CSI_DriverRole
+```
+Install the AWS EBS CSI driver add-on
+```
+aws eks create-addon \
+  --region us-east-1 \
+  --cluster-name flask-mongo-cluster \
+  --addon-name aws-ebs-csi-driver \
+  --service-account-role-arn arn:aws:iam::<id>:role/AmazonEKS_EBS_CSI_DriverRole  #use  the id we set up before 
+```
+To verify installation
+```
+kubectl get pods -n kube-system | grep ebs
+```
+![addon](./screenshot/addon.png)
+### 4. deploy to eks
+To get pvc running we run same code we had as we deploy to the Minikube
+```
+kubectl apply -f mongodb-pvc.yaml 
+kubectl get pvc
+```
+![pvc status](./screenshot/pvc_status.png)
+we will see there is still no VOLUME, CAPACITY, ACCESS, and MODES
+by checking pvc mongo-pvc 
+```
+kubectl describe pvc mongo-pvc
+```
+we see the message waiting for first Consumer to be created before binding
+![pvc before binding](./screenshot/pvc_b.png)
+
+After we apply mongo-deployment
+```
+kubectl apply -f mongodbv-deployment.yaml
+kubectl get pods
+kubectl get pvc
+```
+![complete PVC](./screenshot/C_PVC.png)
+
+then we apply reset of yaml file
+```
+kubectl apply -f mongodb-service.yaml
+kubectl apply -f flask-deployment.yaml
+kubectl apply -f flask-service.yaml
+kubectl get all
+```
+![k8s_aws](./screenshot/kubectl_all_aws.png)
+
+The all nodes are running, and we have a external-ip for our to-do-service
+but we can not visited yet, it takes time to set up
+！[waiting_external_ip](./screenshot/external_ip.png)
+
+now we can use [http://a0a352132be6044f88cc012031f6faa3-1095562976.us-east-1.elb.amazonaws.com:5000/](http://a0a352132be6044f88cc012031f6faa3-1095562976.us-east-1.elb.amazonaws.com:5000/) to visited our application
+![flask_aws](./screenshot/flask_aws.png)
+
+
+## Deployments and ReplicaSets
+Before we change the replicas1
+we have defined replicas as 1 
+```
+spec:
+  replicas: 1
+```
+![get_all_re1](./screenshot/re1_getall.png)
+
+after we change it to 5
+```
+spec:
+  replicas: 5
+```
+```
+kubectl apply -f flask-deployment.yaml
+# Verify the ReplicasSet
+kubectl get all
+kubectl get rs
+```
+![Verify ReplicasSet](./screenshot/rs_all.png)
+
+When we delete the pod we need to know the pod name
+```
+kubectl get pods
+kubectl delete pod to-do-deployment-7cb67d485c-5vnnk to-do-deployment-7cb67d485c-6c29d
+kubectl get pods
+```
+we will see the two pods were deleted, and by checking pods we will see two new pods created
+![auto create](./screenshot/k8s_autocreate.png)
+
+
+we can scale down the replicas without changing yaml file
+```
+kubectl scale deployment to-do-deployment --replicas=3
+```
+![CLI scaled down](./screenshot/scale_down.png)
