@@ -4,6 +4,11 @@ metadata:
   name: to-do-deployment
 spec:
   replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1 
+      maxSurge: 1  
   selector:
     matchLabels:
       app: to-do
@@ -14,7 +19,7 @@ spec:
     spec:
       containers:
         - name: to-do
-          image: majiny/flask-app
+          image: majiny/flask-app:v2
           ports:
             - containerPort: 5000
           env:
@@ -25,3 +30,19 @@ spec:
             - name: FLASK_ENV
               value: development
           imagePullPolicy: IfNotPresent
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 10 
+            periodSeconds: 15    
+            failureThreshold: 3      
+          
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 5000
+            initialDelaySeconds: 5  
+            periodSeconds: 10
+            failureThreshold: 3
