@@ -15,10 +15,21 @@ title = "TODO with Flask"
 heading = "ToDo Reminder"
 #modify=ObjectId()
 
+
+
 def redirect_url():
 	return request.args.get('next') or \
 		request.referrer or \
 		url_for('index')
+
+@app.route('/healthz')
+def healthz():
+    return "OK", 200  # liveness
+
+@app.route('/ready')
+def ready():
+    # You can add database or dependency checks here
+    return "Ready", 200  # readiness
 
 @app.route("/list")
 def lists ():
