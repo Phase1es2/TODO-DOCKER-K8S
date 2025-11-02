@@ -274,12 +274,14 @@ minikube start
         - volumes-> Attaches the PVC created earlier (mongodb-pvc)
     MongoDB Deployment spins up MongoDB and mounts a persistent volume for storage. 
     Even if the Mongo pod is deleted and recreated, the data remains.
+    
     3. mongodb-service.yaml - Internal Service for MongoDB:
         - kind: Service-> exposes a stable endpoint (DNS name) for Mongo pods.
         - selector.app: mongo-> Connects this Service to pods with label app: mongo.
         - port/ targetPort-> Routes traffic from Service port 27017-> pod port 27017.
     Flask can not directly know a pod's IP (pods are dynamic). 
     Instead, it connects to mongo-service: 27017, a stable hostname managed by Kubernetes DNS.
+
     4. flask-deployment.yaml - Flask App Deployment:
         - replicas: 1 -> Run on Flask pod (for Minikube demon).
         - images: majiny/flask-app-> The flask app we pushed to Docker Hub before.
@@ -290,6 +292,7 @@ minikube start
         - imagePullyPolicy: IfNotPresent->Uses a cached local image if available
     This defines the applicaiton container. 
     It runs Flask, connects to MongoDB vai service name, and exposes port 5000 inside the cluster.
+
     5. flask-service.yaml - Exposing Flask to the Outside World:
         - type: LoadBalancer -> Create an external access point/ outside cluster.
         - port: 5000 -> Port exposed to the world.
@@ -341,6 +344,7 @@ I used the eksctl, since eksctl helps to handle:
 - Connects worker nodes to the contorl plane
 - Updates kubeconfig file so kubectl works inmmediately
 - SupporTs Fragate profiles, managed node groups, addones. 
+
 ### 1. download AWS CLI and EKS CLT
 To download AWS CLI
 ```
@@ -404,6 +408,7 @@ eksctl create cluster \
 
 ### 3. set up addon
 By default, Kubernetes iteself doesn't know how to talk to AWS EBS volumes - it needs a "driver" that acts as a translator between Kubernetes and AWS's storage APIs.
+
 EBS CSI(conatiner storage interface) Driver
 -  Dynamically provision EBS volumes when create PersistentVolumeClaims.
 - Attach/detach them automatically to pods.
@@ -411,12 +416,14 @@ EBS CSI(conatiner storage interface) Driver
 
 Since we want to use pvc storage
 we need to Enable OIDC provbider (required for IAM-> K8s mapping)
+
 ```
 eksctl utils associate-iam-oidc-provider \
   --region us-east-1 \
   --cluster flask-mongo-cluster \
   --approve
 ```
+
 EKS uses IAM Roles for Services Account(IRSA) to let pods securely call AWS APIs.
 For that to work, the EKS cluster must have an OIDC (OpenID Connect) identity provider associated with it.
   - The EBS CSI driver pod can assume an IAM role.
@@ -424,6 +431,7 @@ For that to work, the EKS cluster must have an OIDC (OpenID Connect) identity pr
 without this, the driver pod won't have permission to manage EBS volumes.
 
 then create IAM role for the EBS CSI driver
+
 ```
 eksctl create iamserviceaccount \
   --region us-east-1 \
@@ -434,11 +442,13 @@ eksctl create iamserviceaccount \
   --approve \
   --role-name AmazonEKS_EBS_CSI_DriverRole
 ```
+
 This command:
   - Creates a Kubernetes ServiceAccount (ebs-csi-controller-sa)
   - Creatae an IAM Role
   - Attach the AWS managed policy AmazonEBSCSIDriverPolicy
   - Links the Service Account with the IAM Role via OIDC.
+
 This gives the EBS CSI pod power to create/delete/attach/detach EBS volumes. 
 
 Install the AWS EBS CSI driver add-on
@@ -449,6 +459,7 @@ aws eks create-addon \
   --addon-name aws-ebs-csi-driver \
   --service-account-role-arn arn:aws:iam::<id>:role/AmazonEKS_EBS_CSI_DriverRole  #use  the id we set up before 
 ```
+
 This command installs the AWS-managed EBS CSI driver add-on into the cluster
 It tells EKS, deploy the official EBS CSI driver into the kube-system namespace.
 Let it use the IAM role that created, so it can talk to AWS APIs.
@@ -457,19 +468,20 @@ To verify installation
 ```
 kubectl get pods -n kube-system | grep ebs
 ```
+
 ![addon](./screenshot/addon.png)
 Now the driver is successfully deployed  and ready to handle PVCs. 
 
 ### 4. deploy to eks
 Create a Kubernetes deployment for the application in the EKS cluster. This deployment will specify the Docker image to use, the number that the application listens on.
+
 To get pvc running we run same code we had as we deploy to the Minikube
 ```
 kubectl apply -f mongodb-pvc.yaml 
 kubectl get pvc
 ```
 ![pvc status](./screenshot/pvc_status.png)
-we will see there is still no VOLUME, CAPACITY, ACCESS, and MODES
-by checking pvc mongo-pvc 
+We will see there is still no VOLUME, CAPACITY, ACCESS, and MODES by checking pvc mongo-pvc 
 ```
 kubectl describe pvc mongo-pvc
 ```
@@ -485,7 +497,9 @@ kubectl get pvc
 ![complete PVC](./screenshot/C_PVC.png)
 
 Then we apply reset of yaml file
+
 Expose the deployment using a Kubernetes service. This service will provide load balancing for the application and expose the container port so that it can be accessed from outside the EKS cluster.
+
 ```
 kubectl apply -f mongodb-service.yaml
 kubectl apply -f flask-deployment.yaml
@@ -507,6 +521,7 @@ now we can use [http://a0a352132be6044f88cc012031f6faa3-1095562976.us-east-1.elb
 ## Deployments and ReplicaSets
 Before we change the replicas1
 we have defined replicas as 1
+
 Define the desired number of replicas in the flask-deployment.yaml file under spec.replicas.
 ```
 spec:
@@ -519,9 +534,11 @@ after we change it to 5
 spec:
   replicas: 5
 ```
+
 Apply the deployment using 'kubectl apply -f flask-deployment.yaml'.
 Verify teh ReplicaSet with 'kubectl get rs'.
 ```
+
 kubectl apply -f flask-deployment.yaml
 # Verify the ReplicasSet
 kubectl get all
@@ -536,12 +553,14 @@ kubectl get pods
 kubectl delete pod to-do-deployment-7cb67d485c-5vnnk to-do-deployment-7cb67d485c-6c29d
 kubectl get pods
 ```
+
 we will see the two pods were deleted, and by checking pods we will see two new pods created
 ![auto create](./screenshot/k8s_autocreate.png)
 
 
 Scale up or down using either 'kubectl scale deployment to-do-deployment --replicas=n' or by editing the yaml file.
 we can scale down the replicas without changing yaml file
+
 ```
 kubectl scale deployment to-do-deployment --replicas=3
 ```
@@ -557,6 +576,7 @@ Configure the Kubernetes deployment to use a rolling strategy. Set the update st
       maxUnavailable: 1 
       maxSurge: 1  
 ```
+
 When update this Deployment, don't delete all old Pod first.
 Instead, replace them gradually, one by one, while keeping the service running.
 This is the default strategy for Deployments - safer and ensures zero downtimes.
@@ -580,6 +600,7 @@ Tigger the rolling update by the deployment with the new Docker imageversion.
 # apply the update deployment
 kubectl apply -f flask-deployment.yaml
 ```
+
 We can check if the strategy works by:
 ```
 kubectl get deployment to-do-deployment -o yaml | grep -A strategy
@@ -597,6 +618,7 @@ kubectl rollout status deployment/to-do-deployment
 
 Test the updated application to ensure that it is running with the new Dockerimage version.
 ![V2 app](./screenshot/V2app.png)
+
 As we can see the we have modify the head to ToDo Reminder V2, which is match to the new verion of website.
 
 ## Health monitoring
@@ -635,19 +657,25 @@ def ready():
             periodSeconds: 10
             failureThreshold: 3
 ```
+
 helthz() is the endpoint tells k8s, the flask container process is alive and running.
+
 ready() tells ks that the app and mongodb aarea ready to handle requests.
+
 After 10s startup delay, k8s will check every 15s, and if/healthz fails 3 times in a row, the container is restarted.
+
 The readiness probe tells k8s if the pod is ready to receive traffic. If this probe fails, the pods stays in the cluster but is removed from the Service endpoint list.
 
 Monitor the health of the pods using the Kubernetes CLI or the Kubernetes Dashboards.
-Test the health monitoring system by intentionally causing a failure, such as by adding a deliberate error to the application code, and verifying taht kubernetes takes the appropriate actions.
+
+Test the health monitoring system by intentionally causing a failure, such as by adding a deliberate error to the application code, and verifying that kubernetes takes the appropriate actions.
 
 ```
 @app.route('/healthz')
 def healthz():
     return "Unhealthy", 500
 ```
+
 ```
 kubectl apply -f flask-deployment.yaml
 ```
