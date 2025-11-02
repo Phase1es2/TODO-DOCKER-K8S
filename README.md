@@ -74,6 +74,7 @@ Pull the official MongoDB image:
 docker pull mongo
 ```
 ![Mongo image](./screenshot/get_mongo_image.png)
+
 Run the MongoDB container:
 
 ```bash
@@ -93,7 +94,9 @@ Check if the container is running:
 docker ps
 ```
 ![Docker PS Mongo](./screenshot/docker_ps_mongo.png)
-From thie image, we can see the our MongoDB is up, and expose to the 27017 prot.
+
+
+From this image, we can see the our MongoDB is up, and expose to the 27017 prot.
 
 ---
 
@@ -138,6 +141,8 @@ docker volume inspect mongo_data
 docker volume ls
 ```
 ![inspect mongo data](./screenshot/inspect_mongo_lc.png)
+
+
 It lists all the docker volumes on the system.
 By look at the screenshot, we have two local volume on the system
 Also we can check the detail of the mongo_data, which give the information about created time, diver, mountpoint, name, and scope.
@@ -159,6 +164,8 @@ show collections            # list collections
 db.todo.find().pretty()     # view data inside 'todo' collection
 ```
 ![data](./screenshot/mongo_data_lc.png)
+
+
 As we created a to-do list, we can go inside and check.
 It correct provide the data we have input to the list.
 Name: VO
@@ -274,7 +281,7 @@ minikube start
         - volumes-> Attaches the PVC created earlier (mongodb-pvc)
     MongoDB Deployment spins up MongoDB and mounts a persistent volume for storage. 
     Even if the Mongo pod is deleted and recreated, the data remains.
-    
+
     3. mongodb-service.yaml - Internal Service for MongoDB:
         - kind: Service-> exposes a stable endpoint (DNS name) for Mongo pods.
         - selector.app: mongo-> Connects this Service to pods with label app: mongo.
@@ -302,8 +309,11 @@ minikube start
 
 ### 3. deploy service
 Create two pods: one for flask app and one for MongoDB to store data.
+
 Creata a Kubernetes deployment for the application by specifying the Docker image from DockerHub, the number of replicas, and teh container port.
+
 Expose the deployment using Kubernetes service to make the application accessible from outside the cluster. The service should expose the container portand provide load balancing to distribute traffic to the replicas.
+
 using the code to deploy the service.
 ```
 kubectl apply -f mongodb-pvc.yaml
@@ -536,6 +546,7 @@ spec:
 ```
 
 Apply the deployment using 'kubectl apply -f flask-deployment.yaml'.
+
 Verify teh ReplicaSet with 'kubectl get rs'.
 ```
 
@@ -578,7 +589,9 @@ Configure the Kubernetes deployment to use a rolling strategy. Set the update st
 ```
 
 When update this Deployment, don't delete all old Pod first.
+
 Instead, replace them gradually, one by one, while keeping the service running.
+
 This is the default strategy for Deployments - safer and ensures zero downtimes.
 
 Update the Docker image for hte deployment to a new version.
@@ -622,7 +635,10 @@ Test the updated application to ensure that it is running with the new Dockerima
 As we can see the we have modify the head to ToDo Reminder V2, which is match to the new verion of website.
 
 ## Health monitoring
-Configure Kubernetes to monitor the health of the application by setting up probes for the pods. There are two type of probes: liveness Prob and readiness Probe. A liveness Probe checks if the pod is alive and healthy, while a readiness Prob checks if the pod is ready to receive traffic. Specify the probe's configuration by setting parmeters such as the probe type, the probe endpointm the probe interval.
+Configure Kubernetes to monitor the health of the application by setting up probes for the pods. There are two type of probes: liveness Prob and readiness Probe. A liveness Probe checks if the pod is alive and healthy, while a readiness Prob checks if the pod is ready to receive traffic. 
+
+Specify the probe's configuration by setting parmeters such as the probe type, the probe endpointm the probe interval.
+
 Configure Kubernetes to take action if a probe fails, such as by restarting the pod or making it as unhealthy.
 ```
 # add to app.py
@@ -660,13 +676,18 @@ def ready():
 
 helthz() is the endpoint tells k8s, the flask container process is alive and running.
 
+
 ready() tells ks that the app and mongodb aarea ready to handle requests.
+
 
 After 10s startup delay, k8s will check every 15s, and if/healthz fails 3 times in a row, the container is restarted.
 
+
 The readiness probe tells k8s if the pod is ready to receive traffic. If this probe fails, the pods stays in the cluster but is removed from the Service endpoint list.
 
+
 Monitor the health of the pods using the Kubernetes CLI or the Kubernetes Dashboards.
+
 
 Test the health monitoring system by intentionally causing a failure, such as by adding a deliberate error to the application code, and verifying that kubernetes takes the appropriate actions.
 
